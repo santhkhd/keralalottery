@@ -1,0 +1,65 @@
+name: Fetch Kerala Lottery Results
+
+on:
+  schedule:
+    # 16:45 IST daily == 11:15 UTC
+    - cron: "15 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Node dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          fi
+
+      - name: Fetch latest lottery results
+        env:
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+          SCRAPERAPI_ENDPOINT: ${{ secrets.SCRAPERAPI_ENDPOINT }}
+        run: python updateloto.py
+
+      - name: Regenerate history
+        run: node generate-history.js
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git status --porcelain | grep .; then
+            git add .
+            git commit -m "Auto update lottery results $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+
